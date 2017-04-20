@@ -1,56 +1,60 @@
 package kafka;
 
-import com.google.common.collect.Lists;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.streaming.Durations;
-import org.apache.spark.streaming.api.java.JavaDStream;
-import org.apache.spark.streaming.api.java.JavaPairDStream;
-import org.apache.spark.streaming.api.java.JavaPairReceiverInputDStream;
-import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.kafka.KafkaUtils;
+import org.apache.spark.streaming.api.java.*;
+import org.apache.spark.streaming.kafka010.ConsumerStrategies;
+import org.apache.spark.streaming.kafka010.KafkaUtils;
+import org.apache.spark.streaming.kafka010.LocationStrategies;
 import scala.Tuple2;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
 
 /**
  * Created by shaosong on 2017/4/20.
  */
 public class SimpleConsumer {
-    public static void main(String[] args) {
-        //设置匹配模式，以空格分隔
+    public static void main(String[] args) throws InterruptedException {
         final Pattern SPACE = Pattern.compile(" ");
-        //接收数据的地址和端口
-        String zkQuorum = "localhost:2181";
-        //话题所在的组
-        String group = "1";
-        //话题名称以“，”分隔
-        String topics = "sstest";
-        //每个话题的分片数
-        int numThreads = 1;
+        String brokers = "localhost:9092";
+        Map<String, Object> kafkaParams = new HashMap<>();
+        kafkaParams.put("bootstrap.servers", brokers);
+        kafkaParams.put("key.deserializer", StringDeserializer.class);
+        kafkaParams.put("value.deserializer", StringDeserializer.class);
+        kafkaParams.put("group.id", "test_group");
+        kafkaParams.put("auto.offset.reset", "latest");
+        kafkaParams.put("enable.auto.commit", false);
+        Collection<String> topics = Arrays.asList("sstest");
+
         SparkConf sparkConf = new SparkConf().setAppName("KafkaWordCount").setMaster("local[2]");
-        JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.seconds(10));
+        JavaStreamingContext streamingContext = new JavaStreamingContext(sparkConf, Durations.seconds(10));
 //        jssc.checkpoint("checkpoint"); //设置检查点
-        //存放话题跟分片的映射关系
-        Map<String, Integer> topicmap = new HashMap<>();
-        String[] topicsArr = topics.split(",");
-        int n = topicsArr.length;
-        for (int i = 0; i < n; i++) {
-            topicmap.put(topicsArr[i], numThreads);
-        }
+
         //从Kafka中获取数据转换成RDD
-        JavaPairReceiverInputDStream<String, String> lines = KafkaUtils.createStream(jssc, zkQuorum, group, topicmap);
+        final JavaInputDStream<ConsumerRecord<String, String>> stream =
+                KafkaUtils.createDirectStream(
+                        streamingContext,
+                        LocationStrategies.PreferConsistent(),
+                        ConsumerStrategies.<String, String>Subscribe(topics, kafkaParams)
+                );
+        JavaPairDStream<String, String> messages = stream.mapToPair(
+                new PairFunction<ConsumerRecord<String, String>, String, String>() {
+                    @Override
+                    public Tuple2<String, String> call(ConsumerRecord<String, String> record) {
+                        return new Tuple2<>(record.key(), record.value());
+                    }
+                });
+
         //从话题中过滤所需数据
-        JavaDStream<String> words = lines.flatMap(new FlatMapFunction<Tuple2<String, String>, String>() {
-            @Override
-            public Iterable<String> call(Tuple2<String, String> arg0)
-                    throws Exception {
-                return Lists.newArrayList(SPACE.split(arg0._2));
-            }
+        JavaDStream<String> words = messages.flatMap(tuple2 -> {
+            String[] wordArray = SPACE.split(tuple2._2);
+            List wordList = Arrays.asList(wordArray);
+            return wordList.iterator();
         });
         //对其中的单词进行统计
         JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
@@ -67,7 +71,7 @@ public class SimpleConsumer {
         });
         //打印结果
         wordCounts.print();
-        jssc.start();
-        jssc.awaitTermination();
+        streamingContext.start();
+        streamingContext.awaitTermination();
     }
 }

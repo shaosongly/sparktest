@@ -18,13 +18,13 @@ import java.util.Arrays;
 public class SparkStreamingApp {
     private static Logger logger = Logger.getLogger(SparkStreamingApp.class);
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         SparkConf conf = new SparkConf().setAppName("Streaming_test");
         JavaSparkContext sc = new JavaSparkContext(conf);
         JavaStreamingContext ssc = new JavaStreamingContext(sc, Durations.seconds(1));
         JavaReceiverInputDStream<String> lines = ssc.socketTextStream("localhost", 9999);
 
-        JavaDStream<String> words = lines.flatMap(line -> Arrays.asList(line.split(" ")));
+        JavaDStream<String> words = lines.flatMap(line -> Arrays.asList(line.split(" ")).iterator());
         JavaPairDStream<String, Integer> pairs = words.mapToPair(word -> new Tuple2<String, Integer>(word, 1));
         pairs.reduceByKey((x, y) -> x + y).print();
 
