@@ -3,6 +3,7 @@ package kafka;
 import kafka.javaapi.producer.Producer;
 import kafka.producer.KeyedMessage;
 import kafka.producer.ProducerConfig;
+import utils.DateConvert;
 
 import java.util.Properties;
 /**
@@ -17,12 +18,12 @@ public class SimpleProducer {
         ProducerConfig config = new ProducerConfig(props);
         //创建生产这对象
         Producer<String, String> producer = new Producer<String, String>(config);
-        //生成消息
-        KeyedMessage<String, String> data = new KeyedMessage<String, String>("sstest","test kafka");
         try {
             int i =1;
-            while(i < 100){
+            while(true){
                 //发送消息
+                //生成消息
+                KeyedMessage<String, String> data = new KeyedMessage<String, String>("sstest","test kafka " + DateConvert.getCurrentDate());
                 producer.send(data);
                 i++;
                 Thread.sleep(1000);
