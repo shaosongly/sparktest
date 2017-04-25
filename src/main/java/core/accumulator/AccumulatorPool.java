@@ -23,7 +23,7 @@ public class AccumulatorPool<E> {
             return;
         }
         if (isFull(accumulatorWrapper.getTimestamp())) {
-            deleteEarlyElements();
+            deleteEarliestElements();
         }
         Map<String, AccumulatorWrapper<E>> map = null;
         Long ts = accumulatorWrapper.getTimestamp();
@@ -66,7 +66,7 @@ public class AccumulatorPool<E> {
         return pool.size() >= maxPoolSize && !pool.containsKey(ts);
     }
 
-    private void deleteEarlyElements() {
+    private void deleteEarliestElements() {
         Object[] tsList = pool.keySet().toArray();
         long min = (Long) tsList[0];
         for (Object ts : tsList) {

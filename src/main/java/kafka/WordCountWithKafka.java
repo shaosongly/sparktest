@@ -8,7 +8,6 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Durations;
-import org.apache.spark.streaming.Time;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaInputDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
@@ -26,8 +25,8 @@ import java.util.regex.Pattern;
 /**
  * Created by shaosong on 2017/4/20.
  */
-public class SimpleConsumer {
-    private static Logger log = LoggerFactory.getLogger(SimpleConsumer.class);
+public class WordCountWithKafka {
+    private static Logger log = LoggerFactory.getLogger(WordCountWithKafka.class);
 
     public static void main(String[] args) throws InterruptedException {
         final Pattern SPACE = Pattern.compile(" ");
@@ -70,21 +69,27 @@ public class SimpleConsumer {
         wordCounts.persist(StorageLevel.MEMORY_AND_DISK());
         //save
         wordCounts.foreachRDD((rdd, time) -> {
-            Accumulator<Integer> accumulator = streamingContext.sparkContext().accumulator(0, "save error accu");
+            print("batch start time: " + DateConvert.getDate(time.milliseconds()));
+            Accumulator<Integer> accumulator = streamingContext.sparkContext().accumulator(0, "save_error_acc");
             AccumulatorManager.getInstance().register(accumulator, time.milliseconds());
-            print("error accumulator clear: " + accumulator.value());
+            print("error accumulator init value: " + accumulator.value());
             IOUtils.save(rdd, streamingContext.sparkContext(), time.milliseconds());
-            long savedCnt = rdd.count();
-            print("saved count: " + savedCnt);
             int err = accumulator.value();
-            print("error accumalator val: " + err);
+            print("error accumulator val: " + err);
             if (err > 0) {
-                print("output origin message to kafka");
-                Time end = time.$plus(Durations.seconds(1));
-                JavaPairRDD kafkaMessages = messages.slice(time, end).get(0);
-                Tuple2 tuple2 = kafkaMessages.first();
-                //output to kafka
-                print("origin message: " + tuple2);
+                print("need output origin message to kafka");
+                List<JavaPairRDD<String, String>> rdds = messages.slice(time, time);
+                print("slice rdd nums: " + rdds.size());
+                if (rdds.size() != 1) {
+                    print("get origin message from kafka error!");
+                } else {
+                    JavaPairRDD kafkaMessages = rdds.get(0);
+                    //test
+                    Tuple2 tuple2 = kafkaMessages.first();
+                    print("origin message: " + tuple2);
+                    //output to kafka
+                    FailedMessageWriter.sendMessages(kafkaMessages, "localhost:9092");
+                }
             }
         });
 
@@ -103,6 +108,6 @@ public class SimpleConsumer {
     }
 
     private static void print(Object message) {
-        System.out.println(DateConvert.getCurrentDate() + "    " + System.currentTimeMillis() + ": " + message);
+        System.out.println(DateConvert.getDate(null) + "    " + System.currentTimeMillis() + ": " + message);
     }
 }
