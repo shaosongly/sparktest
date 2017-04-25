@@ -11,7 +11,7 @@ import java.util.Random;
  * Created by shaosong on 2017/4/20.
  */
 public class IOUtils {
-    public static void save(JavaPairRDD<String, Integer> rdd, JavaSparkContext jsc, long millils) {
+    public static void save(JavaPairRDD<String, Integer> rdd, JavaSparkContext jsc, Long millils) {
         System.out.print("save begin......");
         rdd.foreachPartition(iter -> {
             final Accumulator<Integer> accumulator = AccumulatorManager.getInstance().getAccumulator(millils, "save_error_acc");
